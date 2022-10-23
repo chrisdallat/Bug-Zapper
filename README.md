@@ -1,22 +1,22 @@
-## OpenCV Webcam Object Tracker
+## Bug Zapper
 
-Starting an implementation of object tracking from webcam using OpenCV, will maybe integrate into some sort of game.
-Currently set to track ORANGE objects.
+Implement a QT GUI based Application for posting/discussing/prioritizing bugs during 
+development within a team. Planning to have either local or server based as option to 
+co-work offline or online. likely FTP server, login functionality, and other useful 
+features that i will figure out on the journey. 
 
 # Compile and Run Instructions
 
 ```sh
-     brew install opencv 
+     brew install qt6
 ```
 ```sh
-    cd tracker
-    cd build
-    cmake ..
-    make
-    ./tracker
+    cd Bug-Zapper
+    ./build.sh --run zapper
 ```
 
 # Dependencies:
-OpenCV
+
+QT6
 
 
