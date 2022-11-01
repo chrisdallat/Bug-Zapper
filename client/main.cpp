@@ -21,8 +21,6 @@
 #include <opencv2/videoio.hpp>
 #include <opencv2/opencv.hpp>
 
-#include "webcam.hpp"
-
 #define SERVER_IP "127.0.0.1"
 
 
@@ -54,70 +52,30 @@ int main(int argc, char *argv[])
     std::cout << "Connected to the server!" << std::endl;
     int bytes_read, bytes_written = 0;
 
-    // WORK FROM HERE ON SENDING FEED
-    Webcam webcam;
-    webcam.create_window();
-    webcam.create_camera();
-
-    int i = 0; //for test at end of loop
-
     while (1)
     {
-        int key;
-        webcam.enable();
-        while (false == webcam.m_stop_stream)
+        std::cout << ">";
+        std::string data;
+        getline(std::cin, data);
+        memset(&msg, 0, sizeof(msg));//clear the buffer
+        strcpy(msg, data.c_str());
+        if(data == "exit")
         {
-            webcam.capture();
-
-            webcam.show(webcam.m_frames);
-
-            std::cout << "m_frames.data() raw-> " << std::strlen((char *)webcam.m_frames.data) << std::endl;
-
-            // Encode frame:
-            std::vector<uchar> buffer(1000000);
-            cv::imencode(".jpeg", webcam.m_frames, buffer);
-
-            size_t buffer_size = buffer.size();
-
-            // send size to receiver
-            send(client_socket, (char *)(&buffer_size), sizeof(buffer_size), 0);
-            size_t remaining = buffer_size;
-            std::cout << "Buffer send size: " << buffer_size << std::endl;
-
-            size_t offset = 0;
-            int len;
-
-            // Send encoded frame
-            len = send(client_socket, (char *)(buffer.data()), remaining, 0);
-            if (len <= 0)
-            {
-                std::cout << "Encoding error" << std::endl;
-            }
-            
-            // exit conditions
-            key = cv::waitKey(25);
-            if ('w' == key)
-                webcam.disable();
-
-            if ('e' == key)
-                webcam.enable();
-
-            if ('q' == key)
-                return 0;
-
-            // timed test of camera being turned off and on by sender because waitkey isnt working :/
-            // works well, connection stays open and video goes black and back.
-
-            // i++;
-            // if (i == 200)
-            //     webcam.disable();
-
-            // if (i == 400)
-            //     webcam.enable();
+            send(client_socket, (char*)&msg, strlen(msg), 0);
+            break;
         }
+        bytes_written += send(client_socket, (char*)&msg, strlen(msg), 0);
+        std::cout << "Awaiting server response..." << std::endl;
+        memset(&msg, 0, sizeof(msg));//clear the buffer
+        bytes_read += recv(client_socket, (char*)&msg, sizeof(msg), 0);
+        if(!strcmp(msg, "exit"))
+        {
+            std::cout << "Server has quit the session" << std::endl;
+            break;
+        }
+        std::cout << "Server: " << msg << std::endl;
     }
 
-    webcam.release();
     close(client_socket);
     std::cout << "********Session********" << std::endl;
     std::cout << "Bytes written: " << bytes_written << " Bytes read: " << bytes_read << std::endl;
@@ -125,25 +83,3 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-// }
-//     std::cout << ">";
-//     std::string data;
-//     getline(std::cin, data);
-//     memset(&msg, 0, sizeof(msg));//clear the buffer
-//     strcpy(msg, data.c_str());
-//     if(data == "exit")
-//     {
-//         send(client_socket, (char*)&msg, strlen(msg), 0);
-//         break;
-//     }
-//     bytes_written += send(client_socket, (char*)&msg, strlen(msg), 0);
-//     std::cout << "Awaiting server response..." << std::endl;
-//     memset(&msg, 0, sizeof(msg));//clear the buffer
-//     bytes_read += recv(client_socket, (char*)&msg, sizeof(msg), 0);
-//     if(!strcmp(msg, "exit"))
-//     {
-//         std::cout << "Server has quit the session" << std::endl;
-//         break;
-//     }
-//     std::cout << "Server: " << msg << std::endl;
-// }

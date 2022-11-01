@@ -1,17 +1,39 @@
-cmake_minimum_required(VERSION 3.7)
+cmake_minimum_required (VERSION 3.10)
+project (client LANGUAGES CXX)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
+
+# flags
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-project(client)
+# QT6 QT5 specifics
+#find_package(   QT NAMES Qt6 REQUIRED COMPONENTS Widgets Multimedia MultimediaWidgets)
+#find_package(   Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Multimedia MultimediaWidgets)
 
-find_package(SDL2 REQUIRED)
-find_package(OpenCV REQUIRED)
-include_directories(${SDL2_INCLUDE_DIRS})
-include_directories(${OpenCV_INCLUDE_DIRS})
+find_package(   OpenCV REQUIRED )
+#find_package(   SDL2 REQUIRED   )
 
-file(GLOB SRCS "*.cpp")
+#include all relevant directories
+#include_directories(    ${PROJECT_SOURCE_DIR} ) 
 
-add_executable(client ${SRCS})
+include_directories(    ${OpenCV_INCLUDE_DIRS} )
+#                        ${SDL2_INCLUDE_DIRS}    )
 
-target_link_libraries(client ${SDL2_LIBRARIES} ${OpenCV_LIBS})
+
+#file(GLOB ALL_SRCS      "${PROJECT_SOURCE_DIR}*.hpp"
+#                        "${PROJECT_SOURCE_DIR}*.cpp")
+ 
+add_executable(         ${PROJECT_NAME} main.cpp)
+
+target_link_libraries(  ${PROJECT_NAME} PRIVATE
+                        #Qt${QT_VERSION_MAJOR}::Widgets
+                        #Qt${QT_VERSION_MAJOR}::Multimedia 
+                        #Qt${QT_VERSION_MAJOR}::MultimediaWidgets
+                        # AV
+                        #${SDL2_LIBRARIES}
+                        ${OpenCV_LIBS})
+
+#if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
+#    qt_finalize_executable(${PROJECT_NAME})
+#endif()
