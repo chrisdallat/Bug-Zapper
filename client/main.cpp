@@ -30,7 +30,7 @@ int main(int argc, char *argv[])
 {
 
     std::string server_ip = SERVER_IP;
-    int port = 8080;
+    int port = 52000;
     // create a message buffer
     char msg[1500];
     // setup a socket and connection tools
@@ -50,6 +50,7 @@ int main(int argc, char *argv[])
         return -1;
     }
     std::cout << "Connected to the server!" << std::endl;
+    std::cout << "client socket: " << client_socket << " status: " << status << std::endl;
     int bytes_read, bytes_written = 0;
 
     while (1)
