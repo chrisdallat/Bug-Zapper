@@ -4,20 +4,19 @@
 
 Server::Server()
 {
+    std::cout << "Setting up listening socket...." << std::endl;
     check(create_listening_sd(), "Failed to create listening socket");
+    bind_and_listen();
+    init_socket_set();
+    std::cout << "Server started:: Port::" << SERVER_PORT << " IP::" << LOCAL_IP << std::endl;
+    std::cout << "Waiting for clients...." << std::endl;
 }
 
 Server::~Server()
 {
+    std::cout << "Closing all open sockets" << std::endl;
+    close_sockets();
     std::cout << "Destroyed Server" << std::endl;
-}
-
-void Server::init_socket_set()
-{
-    memset(m_socket_set, 0, sizeof(m_socket_set));
-    m_socket_set[0].fd = m_listening_sd;
-    m_socket_set[0].events = POLLIN;
-    m_socket_count = 1;
 }
 
 void Server::check(int ret, std::string error_message)
@@ -29,19 +28,26 @@ void Server::check(int ret, std::string error_message)
     }
 }
 
+void Server::main_loop()
+{
+    while (m_exit_server == false)
+    {
+        check(poll(m_socket_set, m_socket_count, TIMEOUT), "poll() failed");
+
+        socket_event_manager(); //managing connections and messages
+    
+        compress_socket_set(); //reorgs sockets when necessary
+    }
+}
+
 int Server::create_listening_sd()
 {
     int on = 1;
-
     m_listening_sd = socket(AF_INET6, SOCK_STREAM, 0);
 
     check(setsockopt(m_listening_sd, SOL_SOCKET, SO_REUSEADDR,
                     (char *)&on, sizeof(on)), "setsockopt() failed");
-    /*************************************************************/
-    /* Set socket to be nonblocking. All of the sockets for      */
-    /* the incoming connections will also be nonblocking since   */
-    /* they will inherit that state from the m_listeninging socket.*/
-    /*************************************************************/
+
     if (ioctl(m_listening_sd, FIONBIO, (char *)&on) < 0)
     {
         perror("ioctl() failed");
@@ -52,245 +58,167 @@ int Server::create_listening_sd()
     return m_listening_sd;
 }
 
-void Server::main_loop()
+void Server::bind_and_listen()
 {
-    int len, ret, on = 1;
-    struct sockaddr_in6 addr;
-    int timeout;
-    int current_size = 0, i, j;
-
-    /*************************************************************/
-    /* Bind the socket                                           */
-    /*************************************************************/
-    memset(&addr, 0, sizeof(addr));
-    addr.sin6_family = AF_INET6;
-    memcpy(&addr.sin6_addr, &in6addr_any, sizeof(in6addr_any));
-    addr.sin6_port = htons(SERVER_PORT);
-    ret = bind(m_listening_sd,
-              (struct sockaddr *)&addr, sizeof(addr));
-    if (ret < 0)
+    memset(&m_server_address, 0, sizeof(m_server_address));
+    m_server_address.sin6_family = AF_INET6;
+    memcpy(&m_server_address.sin6_addr, &in6addr_any, sizeof(in6addr_any));
+    m_server_address.sin6_port = htons(SERVER_PORT);
+    if (bind(m_listening_sd, (struct sockaddr *)&m_server_address, sizeof(m_server_address)) < 0)
     {
         perror("bind() failed");
         close(m_listening_sd);
         exit(-1);
     }
 
-    /*************************************************************/
-    /* Set the m_listening back log                                   */
-    /*************************************************************/
-    ret = listen(m_listening_sd, 32);
-    if (ret < 0)
+    if (listen(m_listening_sd, MAX_CONNECTIONS) < 0)
     {
         perror("m_listening() failed");
         close(m_listening_sd);
         exit(-1);
     }
+}
 
-    /*************************************************************/
-    /* Initialize the pollfd structure                           */
-    /* Set up the initial m_listeninging socket                  */
-    /*************************************************************/
-    init_socket_set();
+void Server::init_socket_set()
+{
+    memset(m_socket_set, 0, sizeof(m_socket_set));
+    m_socket_set[0].fd = m_listening_sd;
+    m_socket_set[0].events = POLLIN;
+    m_socket_count = 1;
+}
 
-    /*************************************************************/
-    /* Loop waiting for incoming connects or for incoming data   */
-    /* on any of the connected sockets.                          */
-    /*************************************************************/
-    do
+////////////////////////////////////////////////////////////////
+////////////Main server logic here!!!///////////////////////////
+////////////////////////////////////////////////////////////////
+
+void Server::socket_event_manager()
+{
+    int current_size = m_socket_count;
+    for (int i = 0; i < current_size; i++)
     {
-        /***********************************************************/
-        /* Call poll() and wait 3 minutes for it to complete.      */
-        /***********************************************************/
-        printf("Waiting on poll()...\n");
-        check(poll(m_socket_set, m_socket_count, TIMEOUT), "poll() failed");
+        if (m_socket_set[i].revents == 0)
+            continue; //skip iteration
 
-        /***********************************************************/
-        /* One or more descriptors are readable.  Need to          */
-        /* determine which ones they are.                          */
-        /***********************************************************/
-        current_size = m_socket_count;
-        for (i = 0; i < current_size; i++)
+        if (m_socket_set[i].revents != POLLIN)
         {
-            /*********************************************************/
-            /* Loop through to find the descriptors that returned    */
-            /* POLLIN and determine whether it's the m_listeninging       */
-            /* or the active connection.                             */
-            /*********************************************************/
-            if (m_socket_set[i].revents == 0)
-                continue;
-
-            /*********************************************************/
-            /* If revents is not POLLIN, it's an unexpected result,  */
-            /* log and end the server.                               */
-            /*********************************************************/
-            if (m_socket_set[i].revents != POLLIN)
-            {
-                printf("  Error! revents = %d\n", m_socket_set[i].revents);
-                m_exit_server = true;
-                break;
-            }
-            if (m_socket_set[i].fd == m_listening_sd)
-            {
-                /*******************************************************/
-                /* m_listeninging descriptor is readable.                   */
-                /*******************************************************/
-                printf("  m_listeninging socket is readable\n");
-
-                /*******************************************************/
-                /* Accept all incoming connections that are            */
-                /* queued up on the m_listeninging socket before we         */
-                /* loop back and call poll again.                      */
-                /*******************************************************/
-                do
-                {
-                    /*****************************************************/
-                    /* Accept each incoming connection. If               */
-                    /* accept fails with EWOULDBLOCK, then we            */
-                    /* have accepted all of them. Any other              */
-                    /* failure on accept will cause us to end the        */
-                    /* server.                                           */
-                    /*****************************************************/
-                    m_new_sd = accept(m_listening_sd, NULL, NULL);
-                    if (m_new_sd < 0)
-                    {
-                        if (errno != EWOULDBLOCK)
-                        {
-                            perror("  accept() failed");
-                            m_exit_server = true;
-                        }
-                        break;
-                    }
-
-                    /*****************************************************/
-                    /* Add the new incoming connection to the            */
-                    /* pollfd structure                                  */
-                    /*****************************************************/
-                    printf("  New incoming connection - %d\n", m_new_sd);
-                    m_socket_set[m_socket_count].fd = m_new_sd;
-                    m_socket_set[m_socket_count].events = POLLIN;
-                    m_socket_count++;
-
-                    /*****************************************************/
-                    /* Loop back up and accept another incoming          */
-                    /* connection                                        */
-                    /*****************************************************/
-                } while (m_new_sd != -1);
-            }
-
-            /*********************************************************/
-            /* This is not the m_listeninging socket, therefore an        */
-            /* existing connection must be readable                  */
-            /*********************************************************/
-
-            else
-            {
-                printf("  Descriptor %d is readable\n", m_socket_set[i].fd);
-                m_close_connection = false;
-                /*******************************************************/
-                /* Receive all incoming data on this socket            */
-                /* before we loop back and call poll again.            */
-                /*******************************************************/
-
-                do
-                {
-                    /*****************************************************/
-                    /* Receive data on this connection until the         */
-                    /* recv fails with EWOULDBLOCK. If any other         */
-                    /* failure occurs, we will close the                 */
-                    /* connection.                                       */
-                    /*****************************************************/
-                    ret = recv(m_socket_set[i].fd, m_buffer, sizeof(m_buffer), 0);
-                    if (ret < 0)
-                    {
-                        if (errno != EWOULDBLOCK)
-                        {
-                            perror("  recv() failed");
-                            m_close_connection = true;
-                        }
-                        break;
-                    }
-
-                    /*****************************************************/
-                    /* Check to see if the connection has been           */
-                    /* closed by the client                              */
-                    /*****************************************************/
-                    if (ret == 0)
-                    {
-                        printf("  Connection closed\n");
-                        m_close_connection = true;
-                        break;
-                    }
-
-                    /*****************************************************/
-                    /* Data was received                                 */
-                    /*****************************************************/
-                    len = ret;
-                    printf("  %d bytes received\n", len);
-
-                    /*****************************************************/
-                    /* Echo the data back to the client                  */
-                    /*****************************************************/
-                    ret = send(m_socket_set[i].fd, m_buffer, len, 0);
-                    if (ret < 0)
-                    {
-                        perror("  send() failed");
-                        m_close_connection = true;
-                        break;
-                    }
-
-                } while (true);
-
-                /*******************************************************/
-                /* If the close_conn flag was turned on, we need       */
-                /* to clean up this active connection. This            */
-                /* clean up process includes removing the              */
-                /* descriptor.                                         */
-                /*******************************************************/
-                if (m_close_connection)
-                {
-                    close(m_socket_set[i].fd);
-                    m_socket_set[i].fd = -1;
-                    m_compress_socket_set = true;
-                }
-
-            } /* End of existing connection is readable             */
-        }     /* End of loop through pollable descriptors              */
-
-        /***********************************************************/
-        /* If the m_compress_socket_set flag was turned on, we need       */
-        /* to squeeze together the array and decrement the number  */
-        /* of file descriptors. We do not need to move back the    */
-        /* events and revents fields because the events will always*/
-        /* be POLLIN in this case, and revents is output.          */
-        /***********************************************************/
-        if (m_compress_socket_set)
-        {
-            compress_socket_set();
+            printf("Error! Socket: %d .revents = %d\n", m_socket_set[i].fd, m_socket_set[i].revents);
+            m_exit_server = true;
+            break;
         }
 
-    } while (m_exit_server == false); /* End of serving running.    */
+        //connections
+        if (m_socket_set[i].fd == m_listening_sd)
+        {
+            std::cout << ">>Listening<<" << std::endl;
+            accept_new_connections();
+        }
 
-    /*************************************************************/
-    /* Clean up all of the sockets that are open                 */
-    /*************************************************************/
-    close_sockets();
+        //inbound messages
+        else
+        {
+            printf("Socket: %d is requesting\n", m_socket_set[i].fd);
+         
+            if(receive_message(m_socket_set[i].fd) <= 0)
+                break;
+
+            m_buffer[m_buffer_length] = '\0';
+            printf("%d bytes received - '%s'\n", m_buffer_length, m_buffer);
+           
+            if(send_message(m_socket_set[i].fd) < 0)
+                break;
+    
+            if (m_close_connection)
+                close_socket_connection(m_socket_set[i].fd);
+        } 
+    }
+    compress_socket_set();
 }
+////////////////////////////////////////////////////////////////
+
+void Server::accept_new_connections()
+{
+    do
+    {
+        m_new_sd = accept(m_listening_sd, NULL, NULL);
+        if (m_new_sd < 0)
+        {
+            if (errno != EWOULDBLOCK)
+            {
+                perror("accept() failed");
+                m_exit_server = true;
+            }
+            break;
+        }
+        update_socket_set();
+    } while (m_new_sd != -1);
+}
+
+void Server::update_socket_set()
+{
+    printf("New incoming connection at socket: %d\n", m_new_sd);
+    m_socket_set[m_socket_count].fd = m_new_sd;
+    m_socket_set[m_socket_count].events = POLLIN;
+    m_socket_count++;
+}
+
+////////////////////////////////////////////////////////////////////
+
+int Server::receive_message(int socket_fd)
+{
+    m_buffer_length = recv(socket_fd, m_buffer, sizeof(m_buffer), 0);
+    if (m_buffer_length < 0)
+    {
+        if (errno != EWOULDBLOCK)
+        {
+            perror("recv() failed");
+            m_close_connection = true;
+        }
+    }
+    if (m_buffer_length == 0)
+    {
+        std::cout << "Connection closed" << std::endl;
+        m_close_connection = true;
+    }
+    return m_buffer_length;
+}
+
+int Server::send_message(int socket_fd)
+{
+    if (send(socket_fd, m_buffer, m_buffer_length, 0) < 0)
+    {
+        perror("send() failed");
+        m_close_connection = true;
+        return -1;
+    }
+    return m_buffer_length;
+}
+
+////////////////////////////////////////////////////////////////////////////
 
 void Server::compress_socket_set()
 {
-    m_compress_socket_set = false;
-    for (int i = 0; i < m_socket_count; i++)
+    if(m_compress_socket_set)
     {
-        if (m_socket_set[i].fd == -1)
+        for (int i = 0; i < m_socket_count; i++)
         {
-            for (int j = i; j < m_socket_count; j++)
+            if (m_socket_set[i].fd == -1)
             {
-                m_socket_set[j].fd = m_socket_set[j + 1].fd;
+                for (int j = i; j < m_socket_count; j++)
+                    m_socket_set[j].fd = m_socket_set[j + 1].fd;
+
+                i--;
+                m_socket_count--;
             }
-            i--;
-            m_socket_count--;
         }
     }
+    m_compress_socket_set = false;
+}
+
+void Server::close_socket_connection(int socket)
+{
+    close(socket);
+    socket = -1;
+    m_compress_socket_set = true;
 }
 
 void Server::close_sockets()
