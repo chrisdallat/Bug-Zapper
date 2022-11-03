@@ -13,59 +13,49 @@
 #include <poll.h>
 #include <unistd.h>
 
+#include <sys/ioctl.h>
+
 #define MAX_BUFFER_SIZE 1024
 #define POLL_TIMEOUT 3000
 #define MAX_CONNECTIONS 10
-#define SERVER_PORT "52000"
+#define SERVER_PORT 52000
 
 class Server
 {
-    public:
+public:
+    Server();
+    ~Server();
 
-        Server();
-        ~Server();
+    int                 create_listening_sd();
+    void                bind_and_listen();
 
-        void            main_loop();
+    void                init_socket_set();
+    void                compress_socket_set();
 
-        //getters & setters
-        void            set_server_port(int t_server_port);
-        int             get_server_port() const;
+    void                check(int ret, std::string error_message);
 
-        void            set_server_address();
-        sockaddr_in     get_server_address() const;
+    void                main_loop();
 
-        void            create_server_listening_socket();
-        int             create_socket(int socket_fd);
-        int             get_server_listening_socket() const;
+    void                close_sockets();    
 
-        void            init_socket_set();
+    //-------------------public variables------------------------------//
 
-        void            set_server_message(std::string& t_message);
-        std::string     get_server_message();
+private:
+    
+    int m_listening_sd; 
+    int m_new_sd;
 
-        void            check(int res);
+    sockaddr_in6 m_server_address;
 
+    pollfd m_socket_set[MAX_CONNECTIONS];
+    int m_socket_count;
+    
+    char m_buffer[MAX_BUFFER_SIZE];
 
-        //-------------------public variables------------------------------//
-        
-    private:
-
-        //-------------------bools----------------------------------------//
-
-        bool m_exit;
-
-        //-------------------server data------------------------------//
-
-        int m_server_port;
-        int m_server_listening_socket;
-        sockaddr_in m_server_address;
-        pollfd m_socket_set[MAX_CONNECTIONS];
-        int m_socket_count;
-        int m_current_socket; //current in loops
-
-        //-------------------messages data ------------------------------//
-
-        std::vector<std::string> m_server_messages;
+    //-------------------bools---------------------------------------//
+    bool m_exit_server;
+    bool m_compress_socket_set;
+    bool m_close_connection;
 
 };
 
