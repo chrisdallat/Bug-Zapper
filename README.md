@@ -10,9 +10,20 @@ features that i will figure out on the journey.
 ```sh
      brew install qt6
 ```
+Server:
 ```sh
-    cd Bug-Zapper
-    ./build.sh --run zapper
+    cd [root directory name]/server
+    ./build.sh --run server
+```
+Client(while Server is running):
+```sh
+    cd [root directory name]/client
+    ./build.sh --run client
+```
+
+to cleanup build files in either:
+```sh
+    ./build.sh --clean-all
 ```
 
 # Dependencies:
