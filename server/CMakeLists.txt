@@ -24,7 +24,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 #file(GLOB ALL_SRCS      "${PROJECT_SOURCE_DIR}*.hpp"
 #                        "${PROJECT_SOURCE_DIR}*.cpp")
  
-add_executable(         ${PROJECT_NAME} main.cpp server.cpp)
+add_executable(         ${PROJECT_NAME} main.cpp server.cpp sockets.cpp)
 
 #target_link_libraries(  ${PROJECT_NAME} PRIVATE
                         #Qt${QT_VERSION_MAJOR}::Widgets

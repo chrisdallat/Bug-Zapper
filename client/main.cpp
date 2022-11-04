@@ -58,8 +58,9 @@ int main(int argc, char *argv[])
         std::cout << ">";
         std::string data;
         getline(std::cin, data);
+        std::cout << "entered:  '" << data.c_str() << "'" << std::endl;
         memset(&msg, 0, sizeof(msg));//clear the buffer
-        strcpy(msg, data.c_str());
+        strncpy(msg, data.c_str(), sizeof(msg));
         if(data == "exit")
         {
             send(client_socket, (char*)&msg, strlen(msg), 0);
