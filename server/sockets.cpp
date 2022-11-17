@@ -87,6 +87,7 @@ bool Sockets::socket_event_manager()
 
         if (m_socket_set[i].revents == 17)
         {
+            std::cout << "Socket: " << m_socket_set[i].fd << " closing" << std::endl;
             close_socket_connection(m_socket_set[i].fd);
             compress_socket_set();
             break;
@@ -126,7 +127,11 @@ bool Sockets::socket_event_manager()
                 break;
 
             if (m_close_connection)
+            {
+                std::cout << "m_close_connection = true" << std::endl;
                 close_socket_connection(i);
+
+            }
         }
     }
     return false;
@@ -206,7 +211,7 @@ void Sockets::compress_socket_set()
 
 void Sockets::close_socket_connection(int &socket)
 {
-    std::cout << "close_socket_connection()" << std::endl;
+    std::cout << "close_socket_connection(" << socket << ")" << std::endl;
     close(socket);
     socket = -1;
     m_compress_socket_set = true;

@@ -18,7 +18,7 @@
 #define SERVER_PORT 52000
 #define MAX_BUFFER_SIZE 1024
 #define MAX_CONNECTIONS 10
-#define TIMEOUT 1000
+#define TIMEOUT 3000
 
 class Sockets
 {
